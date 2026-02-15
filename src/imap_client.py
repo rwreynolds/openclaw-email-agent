@@ -2,7 +2,7 @@ import email
 import imaplib
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
 from typing import Optional
@@ -183,12 +183,15 @@ class IMAPClient:
         # Parse body
         body_plain, body_html, attachments = self._parse_body(msg)
 
-        # Parse date
+        # Parse date (ensure timezone-aware)
         date_str = msg.get("Date")
         try:
-            received_at = parsedate_to_datetime(date_str) if date_str else datetime.utcnow()
+            received_at = parsedate_to_datetime(date_str) if date_str else datetime.now(timezone.utc)
+            # Ensure timezone-aware
+            if received_at.tzinfo is None:
+                received_at = received_at.replace(tzinfo=timezone.utc)
         except Exception:
-            received_at = datetime.utcnow()
+            received_at = datetime.now(timezone.utc)
 
         # Parse message references
         message_id = safe_str(msg.get("Message-ID", gmail_msg_id or email_id))
