@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     openclaw_webhook_endpoint: str = "/webhooks/email"
     openclaw_api_key: str = ""
 
+    # OpenRouter (for LLM)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "openai/gpt-4o"
+
     # Gmail Accounts (JSON string)
     gmail_accounts: str = "[]"
 

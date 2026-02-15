@@ -16,7 +16,12 @@ class OpenClawClient:
         self.gateway_url = settings.openclaw_gateway_url
         self.webhook_url = settings.openclaw_webhook_url
         self.api_key = settings.openclaw_api_key
+        # OpenRouter settings
+        self.openrouter_api_key = settings.openrouter_api_key
+        self.openrouter_base_url = settings.openrouter_base_url
+        self.openrouter_model = settings.openrouter_model
         self._client: Optional[httpx.AsyncClient] = None
+        self._openrouter_client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -29,10 +34,25 @@ class OpenClawClient:
             )
         return self._client
 
+    async def _get_openrouter_client(self) -> httpx.AsyncClient:
+        if self._openrouter_client is None:
+            self._openrouter_client = httpx.AsyncClient(
+                timeout=60.0,
+                headers={
+                    "Authorization": f"Bearer {self.openrouter_api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/openclaw/email-agent",
+                },
+            )
+        return self._openrouter_client
+
     async def close(self) -> None:
         if self._client:
             await self._client.aclose()
             self._client = None
+        if self._openrouter_client:
+            await self._openrouter_client.aclose()
+            self._openrouter_client = None
 
     async def notify_new_emails(self, account: str, emails: list[Email]) -> bool:
         if not self.gateway_url:
@@ -76,26 +96,34 @@ class OpenClawClient:
         system_prompt: Optional[str] = None,
         max_tokens: int = 1000,
     ) -> Optional[str]:
-        if not self.gateway_url:
-            logger.warning("OpenClaw Gateway URL not configured")
+        if not self.openrouter_api_key:
+            logger.warning("OpenRouter API key not configured")
             return None
 
-        # OpenClaw Gateway LLM endpoint
-        llm_url = f"{self.gateway_url.rstrip('/')}/api/llm/completion"
+        # OpenRouter chat completions endpoint (OpenAI-compatible)
+        llm_url = f"{self.openrouter_base_url.rstrip('/')}/chat/completions"
+
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
         payload: dict[str, Any] = {
-            "prompt": prompt,
+            "model": self.openrouter_model,
+            "messages": messages,
             "max_tokens": max_tokens,
         }
-        if system_prompt:
-            payload["system"] = system_prompt
 
         try:
-            client = await self._get_client()
+            client = await self._get_openrouter_client()
             response = await client.post(llm_url, json=payload)
             response.raise_for_status()
             data = response.json()
-            return data.get("completion") or data.get("text") or data.get("content")
+            # OpenAI-compatible response format
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content")
+            return None
         except httpx.HTTPError as e:
             logger.error(f"LLM request failed: {e}")
             return None
