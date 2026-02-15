@@ -13,6 +13,16 @@ from .models import Attachment, Email, EmailAddress
 logger = logging.getLogger(__name__)
 
 
+def safe_str(value: str | bytes | None) -> str:
+    """Convert any value to a safe ASCII-compatible string."""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    # Replace non-breaking spaces and other problematic chars
+    return value.replace("\xa0", " ").replace("\u200b", "")
+
+
 class IMAPClient:
     def __init__(self, account: GmailAccountConfig):
         self.account = account
@@ -181,9 +191,9 @@ class IMAPClient:
             received_at = datetime.utcnow()
 
         # Parse message references
-        message_id = msg.get("Message-ID", gmail_msg_id or email_id)
-        in_reply_to = msg.get("In-Reply-To")
-        references_str = msg.get("References", "")
+        message_id = safe_str(msg.get("Message-ID", gmail_msg_id or email_id))
+        in_reply_to = safe_str(msg.get("In-Reply-To")) if msg.get("In-Reply-To") else None
+        references_str = safe_str(msg.get("References", ""))
         references = references_str.split() if references_str else []
 
         # Determine read status from flags
@@ -191,12 +201,12 @@ class IMAPClient:
         is_starred = "\\Flagged" in flags
 
         # Extract labels from flags
-        labels = [f for f in flags if f.startswith("\\") and f not in ("\\Seen", "\\Flagged", "\\Recent")]
+        labels = [safe_str(f) for f in flags if f.startswith("\\") and f not in ("\\Seen", "\\Flagged", "\\Recent")]
 
         # Create snippet from body
         snippet = None
         if body_plain:
-            snippet = body_plain[:200].replace("\n", " ").strip()
+            snippet = safe_str(body_plain[:200].replace("\n", " ").strip())
 
         return Email(
             id=email_id,
@@ -230,17 +240,15 @@ class IMAPClient:
                     result.append(part.decode(charset or "utf-8", errors="replace"))
                 else:
                     result.append(str(part))
-            # Replace non-breaking spaces and other problematic characters
-            return "".join(result).replace("\xa0", " ")
+            return safe_str("".join(result))
         except Exception:
-            # Fallback: return original value with non-ASCII replaced
-            return value.encode("ascii", errors="replace").decode("ascii")
+            return safe_str(value)
 
     def _parse_address(self, addr_str: str) -> EmailAddress:
         name, email_addr = parseaddr(self._decode_header(addr_str))
         return EmailAddress(
-            email=email_addr or "unknown@unknown.com",
-            name=name or None,
+            email=safe_str(email_addr) or "unknown@unknown.com",
+            name=safe_str(name) if name else None,
         )
 
     def _parse_address_list(self, addr_str: str) -> list[EmailAddress]:
@@ -284,18 +292,18 @@ class IMAPClient:
                     payload = part.get_payload(decode=True)
                     if payload:
                         charset = part.get_content_charset() or "utf-8"
-                        body_plain = payload.decode(charset, errors="replace")
+                        body_plain = safe_str(payload.decode(charset, errors="replace"))
                 elif content_type == "text/html" and not body_html:
                     payload = part.get_payload(decode=True)
                     if payload:
                         charset = part.get_content_charset() or "utf-8"
-                        body_html = payload.decode(charset, errors="replace")
+                        body_html = safe_str(payload.decode(charset, errors="replace"))
         else:
             content_type = msg.get_content_type()
             payload = msg.get_payload(decode=True)
             if payload:
                 charset = msg.get_content_charset() or "utf-8"
-                decoded = payload.decode(charset, errors="replace")
+                decoded = safe_str(payload.decode(charset, errors="replace"))
                 if content_type == "text/html":
                     body_html = decoded
                 else:
