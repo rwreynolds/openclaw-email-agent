@@ -7,10 +7,22 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def sanitize_credential(value: str) -> str:
+    """Remove invisible/problematic characters from credentials."""
+    # Replace non-breaking spaces, zero-width spaces, and other invisible chars
+    return (
+        value.replace("\xa0", "")  # non-breaking space
+        .replace("\u200b", "")  # zero-width space
+        .replace("\u00a0", "")  # another non-breaking space
+        .replace(" ", "")  # regular spaces (passwords shouldn't have them)
+        .strip()
+    )
+
+
 class GmailAccountConfig:
     def __init__(self, email: str, app_password: str):
-        self.email = email
-        self.app_password = app_password
+        self.email = email.strip()
+        self.app_password = sanitize_credential(app_password)
         self.imap_server = "imap.gmail.com"
         self.imap_port = 993
         self.smtp_server = "smtp.gmail.com"
