@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  email-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclaw-email-agent
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL}
+      - OPENCLAW_WEBHOOK_ENDPOINT=${OPENCLAW_WEBHOOK_ENDPOINT:-/webhooks/email}
+      - OPENCLAW_API_KEY=${OPENCLAW_API_KEY}
+      - GMAIL_ACCOUNTS=${GMAIL_ACCOUNTS}
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-15}
+      - EMAIL_CATEGORIES=${EMAIL_CATEGORIES:-Work,Personal,Newsletters,Spam,Notifications}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
