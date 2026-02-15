@@ -74,7 +74,7 @@ class EmailScheduler:
             try:
                 await self._check_account(account.id, str(account.email))
             except Exception as e:
-                logger.error(f"Error checking account {account.email}: {e}")
+                logger.exception(f"Error checking account {account.email}: {e}")
 
     async def _check_account(self, account_id: str, account_email: str) -> None:
         # Initialize seen IDs for this account
