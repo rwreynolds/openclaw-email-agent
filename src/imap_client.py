@@ -99,7 +99,7 @@ class IMAPClient:
 
         for item in data:
             if isinstance(item, tuple):
-                header = item[0].decode("utf-8") if isinstance(item[0], bytes) else str(item[0])
+                header = item[0].decode("utf-8", errors="replace") if isinstance(item[0], bytes) else str(item[0])
 
                 # Extract X-GM-THRID
                 thrid_match = re.search(r"X-GM-THRID (\d+)", header)
@@ -222,14 +222,19 @@ class IMAPClient:
     def _decode_header(self, value: str) -> str:
         if not value:
             return ""
-        decoded_parts = decode_header(value)
-        result = []
-        for part, charset in decoded_parts:
-            if isinstance(part, bytes):
-                result.append(part.decode(charset or "utf-8", errors="replace"))
-            else:
-                result.append(part)
-        return "".join(result)
+        try:
+            decoded_parts = decode_header(value)
+            result = []
+            for part, charset in decoded_parts:
+                if isinstance(part, bytes):
+                    result.append(part.decode(charset or "utf-8", errors="replace"))
+                else:
+                    result.append(str(part))
+            # Replace non-breaking spaces and other problematic characters
+            return "".join(result).replace("\xa0", " ")
+        except Exception:
+            # Fallback: return original value with non-ASCII replaced
+            return value.encode("ascii", errors="replace").decode("ascii")
 
     def _parse_address(self, addr_str: str) -> EmailAddress:
         name, email_addr = parseaddr(self._decode_header(addr_str))
